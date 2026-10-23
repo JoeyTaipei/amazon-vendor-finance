@@ -1,0 +1,308 @@
+name: AMAZON_VENDOR_FINANCE_SV
+description: 'Amazon 1P vendor finance: invoices, remittance deductions (shortages, uncategorized, fees), payments, co-op and shortage disputes. Amounts in USD. Provisions are excluded from deductions.'
+tables:
+- name: REMITTANCE_LINES
+  description: Amazon remittance lines. Negative AMOUNT = deduction Amazon withheld. PROVISION lines are accounting entries, never count them as deductions.
+  base_table:
+    database: AMAZON_FINANCE_APP
+    schema: STAGING
+    table: REMITTANCE_LINES
+  dimensions:
+  - name: LINE_ID
+    expr: LINE_ID
+    data_type: NUMBER
+  - name: PAYMENT_NUMBER
+    expr: PAYMENT_NUMBER
+    data_type: VARCHAR
+  - name: INVOICE_NUMBER
+    expr: INVOICE_NUMBER
+    data_type: VARCHAR
+  - name: DESCRIPTION
+    expr: DESCRIPTION
+    data_type: VARCHAR
+    description: Raw Amazon remittance description; -____- means no description
+  - name: DEDUCTION_CATEGORY
+    expr: DEDUCTION_CATEGORY
+    data_type: VARCHAR
+    description: SHORTAGE, UNCATEGORIZED, DAMAGE_ALLOWANCE, AVS_SVS, MISSED_ADJUSTMENT, RETURNS, OPERATIONAL_FEES, COOP, INVOICE_PAYMENT, PROVISION, OTHER
+  - name: IS_PROVISION
+    expr: IS_PROVISION
+    data_type: BOOLEAN
+  - name: IS_SHORTAGE
+    expr: IS_SHORTAGE
+    data_type: BOOLEAN
+  - name: IS_DEDUCTION
+    expr: IS_DEDUCTION
+    data_type: BOOLEAN
+    description: TRUE when amount < 0 and not a provision
+  time_dimensions:
+  - name: INVOICE_DATE
+    expr: INVOICE_DATE
+    data_type: DATE
+  facts:
+  - name: AMOUNT
+    expr: AMOUNT
+    data_type: FLOAT
+    description: Line amount, negative = deduction
+  - name: AMOUNT_PAID
+    expr: AMOUNT_PAID
+    data_type: FLOAT
+    description: Paid on line
+  - name: REMAINING_AMOUNT
+    expr: REMAINING_AMOUNT
+    data_type: FLOAT
+    description: Remaining on line
+  metrics:
+  - name: TOTAL_DEDUCTIONS
+    expr: SUM(CASE WHEN REMITTANCE_LINES.IS_DEDUCTION THEN REMITTANCE_LINES.AMOUNT ELSE 0 END)
+    description: Total deductions (negative), excluding provisions
+  - name: SHORTAGE_DEDUCTED
+    expr: SUM(CASE WHEN REMITTANCE_LINES.IS_SHORTAGE THEN REMITTANCE_LINES.AMOUNT ELSE 0 END)
+    description: Shortage claim deductions (negative)
+  - name: UNCATEGORIZED_DEDUCTIONS
+    expr: SUM(CASE WHEN REMITTANCE_LINES.IS_DEDUCTION AND REMITTANCE_LINES.DEDUCTION_CATEGORY = 'UNCATEGORIZED' THEN REMITTANCE_LINES.AMOUNT ELSE 0 END)
+    description: Deductions with no description
+  primary_key:
+    columns:
+    - LINE_ID
+- name: INVOICES
+  description: One row per vendor invoice submitted to Amazon.
+  base_table:
+    database: AMAZON_FINANCE_APP
+    schema: STAGING
+    table: INVOICES
+  dimensions:
+  - name: INVOICE_NUMBER
+    expr: INVOICE_NUMBER
+    data_type: VARCHAR
+  - name: INVOICE_STATUS
+    expr: INVOICE_STATUS
+    data_type: VARCHAR
+  - name: LIST_OF_POS
+    expr: LIST_OF_POS
+    data_type: VARCHAR
+  time_dimensions:
+  - name: INVOICE_DATE
+    expr: INVOICE_DATE
+    data_type: DATE
+  - name: PAYMENT_DUE_DATE
+    expr: PAYMENT_DUE_DATE
+    data_type: DATE
+  facts:
+  - name: INVOICE_AMOUNT
+    expr: INVOICE_AMOUNT
+    data_type: FLOAT
+    description: Invoiced
+  - name: PAID_AMOUNT
+    expr: PAID_AMOUNT
+    data_type: FLOAT
+    description: Paid
+  - name: UNPAID_AMOUNT
+    expr: UNPAID_AMOUNT
+    data_type: FLOAT
+    description: Invoiced minus paid
+  - name: PRICE_VARIANCE
+    expr: PRICE_VARIANCE
+    data_type: FLOAT
+    description: Price variance
+  - name: QUANTITY_VARIANCE
+    expr: QUANTITY_VARIANCE
+    data_type: FLOAT
+    description: Quantity variance
+  metrics:
+  - name: TOTAL_INVOICED
+    expr: SUM(INVOICES.INVOICE_AMOUNT)
+    description: Total invoiced
+  - name: TOTAL_PAID
+    expr: SUM(INVOICES.PAID_AMOUNT)
+    description: Total paid
+  - name: TOTAL_UNPAID
+    expr: SUM(INVOICES.UNPAID_AMOUNT)
+    description: Total unpaid
+  - name: INVOICE_COUNT
+    expr: COUNT(INVOICES.INVOICE_NUMBER)
+    description: Number of invoices
+- name: PAYMENTS
+  description: One row per Amazon remittance payment.
+  base_table:
+    database: AMAZON_FINANCE_APP
+    schema: STAGING
+    table: PAYMENTS
+  dimensions:
+  - name: PAYMENT_NUMBER
+    expr: PAYMENT_NUMBER
+    data_type: VARCHAR
+  - name: PAYMENT_TYPE
+    expr: PAYMENT_TYPE
+    data_type: VARCHAR
+  - name: PAYMENT_STATUS
+    expr: PAYMENT_STATUS
+    data_type: VARCHAR
+  time_dimensions:
+  - name: PAYMENT_DATE
+    expr: PAYMENT_DATE
+    data_type: DATE
+  facts:
+  - name: PAYMENT_AMOUNT
+    expr: PAYMENT_AMOUNT
+    data_type: FLOAT
+    description: Payment amount
+  metrics:
+  - name: TOTAL_PAYMENTS
+    expr: SUM(PAYMENTS.PAYMENT_AMOUNT)
+    description: Total remitted
+  primary_key:
+    columns:
+    - PAYMENT_NUMBER
+- name: COOP
+  description: Co-op marketing charges by agreement.
+  base_table:
+    database: AMAZON_FINANCE_APP
+    schema: STAGING
+    table: COOP
+  dimensions:
+  - name: COOP_ID
+    expr: COOP_ID
+    data_type: NUMBER
+  - name: INVOICE_ID
+    expr: INVOICE_ID
+    data_type: VARCHAR
+  - name: AGREEMENT_ID
+    expr: AGREEMENT_ID
+    data_type: VARCHAR
+  - name: AGREEMENT_TITLE
+    expr: AGREEMENT_TITLE
+    data_type: VARCHAR
+  - name: FUNDING_TYPE
+    expr: FUNDING_TYPE
+    data_type: VARCHAR
+  time_dimensions:
+  - name: INVOICE_DATE
+    expr: INVOICE_DATE
+    data_type: DATE
+  facts:
+  - name: COOP_AMOUNT
+    expr: COOP_AMOUNT
+    data_type: FLOAT
+    description: Co-op charge
+  metrics:
+  - name: TOTAL_COOP
+    expr: SUM(COOP.COOP_AMOUNT)
+    description: Total co-op charges
+- name: DISPUTES
+  description: Shortage disputes filed with Amazon (from Feb 2023). DISPUTE_DECISION PENDING = no decision yet.
+  base_table:
+    database: AMAZON_FINANCE_APP
+    schema: STAGING
+    table: DISPUTES
+  dimensions:
+  - name: DISPUTE_LINE_ID
+    expr: DISPUTE_LINE_ID
+    data_type: NUMBER
+  - name: DISPUTE_ID
+    expr: DISPUTE_ID
+    data_type: VARCHAR
+  - name: INVOICE_NUMBER
+    expr: INVOICE_NUMBER
+    data_type: VARCHAR
+  - name: PO
+    expr: PO
+    data_type: VARCHAR
+  - name: ASIN
+    expr: ASIN
+    data_type: VARCHAR
+  - name: DISPUTE_DECISION
+    expr: DISPUTE_DECISION
+    data_type: VARCHAR
+  time_dimensions:
+  - name: DISPUTE_DATE
+    expr: DISPUTE_DATE
+    data_type: DATE
+  - name: INVOICE_DATE
+    expr: INVOICE_DATE
+    data_type: DATE
+  facts:
+  - name: SHORTAGE_AMOUNT
+    expr: SHORTAGE_AMOUNT
+    data_type: FLOAT
+    description: Shortage claimed
+  - name: DISPUTE_AMOUNT
+    expr: DISPUTE_AMOUNT
+    data_type: FLOAT
+    description: Disputed
+  - name: RESOLVED_AMOUNT
+    expr: RESOLVED_AMOUNT
+    data_type: FLOAT
+    description: Recovered from Amazon
+  metrics:
+  - name: TOTAL_DISPUTED
+    expr: SUM(DISPUTES.DISPUTE_AMOUNT)
+    description: Total disputed
+  - name: TOTAL_RECOVERED
+    expr: SUM(DISPUTES.RESOLVED_AMOUNT)
+    description: Total recovered
+  - name: DISPUTE_SHORTAGE
+    expr: SUM(DISPUTES.SHORTAGE_AMOUNT)
+    description: Shortage amount on disputed lines
+relationships:
+- name: REMITTANCE_TO_PAYMENTS
+  left_table: REMITTANCE_LINES
+  right_table: PAYMENTS
+  relationship_columns:
+  - left_column: PAYMENT_NUMBER
+    right_column: PAYMENT_NUMBER
+  join_type: left_outer
+  relationship_type: many_to_one
+verified_queries:
+- name: shortage_recovery_rate
+  question: What is our shortage recovery rate?
+  sql: WITH d AS (SELECT -SUM(AMOUNT) AS shortage_deducted FROM remittance_lines WHERE IS_SHORTAGE), r AS (SELECT SUM(RESOLVED_AMOUNT) AS recovered, SUM(DISPUTE_AMOUNT) AS disputed FROM disputes) SELECT d.shortage_deducted, r.disputed, r.recovered, r.recovered / NULLIF(d.shortage_deducted, 0) AS recovery_rate
+    FROM d, r
+  verified_at: 1792787000
+  verified_by: Berk
+  use_as_onboarding_question: true
+- name: shortage_by_month
+  question: How much shortage was deducted vs recovered by month?
+  sql: WITH d AS (SELECT DATE_TRUNC('MONTH', INVOICE_DATE) AS month, SUM(AMOUNT) AS shortage_deducted FROM remittance_lines WHERE IS_SHORTAGE GROUP BY 1), r AS (SELECT DATE_TRUNC('MONTH', DISPUTE_DATE) AS month, SUM(RESOLVED_AMOUNT) AS recovered FROM disputes GROUP BY 1) SELECT COALESCE(d.month, r.month)
+    AS month, d.shortage_deducted, r.recovered FROM d FULL OUTER JOIN r ON d.month = r.month ORDER BY 1
+  verified_at: 1792786522
+  verified_by: Berk
+  use_as_onboarding_question: false
+- name: deductions_by_category
+  question: What are total deductions by category?
+  sql: SELECT DEDUCTION_CATEGORY, COUNT(*) AS lines, SUM(AMOUNT) AS deductions FROM remittance_lines WHERE IS_DEDUCTION GROUP BY 1 ORDER BY deductions
+  verified_at: 1792786522
+  verified_by: Berk
+  use_as_onboarding_question: false
+- name: uncategorized_share
+  question: What share of deduction dollars is not categorized?
+  sql: SELECT SUM(CASE WHEN DEDUCTION_CATEGORY = 'UNCATEGORIZED' THEN AMOUNT ELSE 0 END) / NULLIF(SUM(AMOUNT), 0) AS uncategorized_share FROM remittance_lines WHERE IS_DEDUCTION
+  verified_at: 1792786522
+  verified_by: Berk
+  use_as_onboarding_question: false
+- name: invoiced_vs_paid_by_month
+  question: What is invoiced vs paid by month?
+  sql: SELECT DATE_TRUNC('MONTH', INVOICE_DATE) AS month, SUM(INVOICE_AMOUNT) AS invoiced, SUM(PAID_AMOUNT) AS paid, SUM(UNPAID_AMOUNT) AS unpaid FROM invoices GROUP BY 1 ORDER BY 1
+  verified_at: 1792786522
+  verified_by: Berk
+  use_as_onboarding_question: false
+- name: unpaid_aging
+  question: What is the unpaid invoice aging?
+  sql: SELECT CASE WHEN DATEDIFF('day', PAYMENT_DUE_DATE, CURRENT_DATE) <= 0 THEN 'Not due' WHEN DATEDIFF('day', PAYMENT_DUE_DATE, CURRENT_DATE) <= 30 THEN '1-30' WHEN DATEDIFF('day', PAYMENT_DUE_DATE, CURRENT_DATE) <= 60 THEN '31-60' ELSE '60+' END AS aging_bucket, COUNT(*) AS invoices, SUM(UNPAID_AMOUNT)
+    AS unpaid FROM invoices WHERE UNPAID_AMOUNT > 0.01 GROUP BY 1 ORDER BY 1
+  verified_at: 1792786522
+  verified_by: Berk
+  use_as_onboarding_question: false
+- name: coop_by_agreement
+  question: What are co-op charges by agreement?
+  sql: SELECT AGREEMENT_TITLE, FUNDING_TYPE, SUM(COOP_AMOUNT) AS coop FROM coop GROUP BY 1, 2 ORDER BY coop DESC
+  verified_at: 1792786522
+  verified_by: Berk
+  use_as_onboarding_question: false
+- name: top_shortage_asins
+  question: Which ASINs have the most shortage disputes?
+  sql: SELECT ASIN, COUNT(*) AS dispute_lines, SUM(SHORTAGE_AMOUNT) AS shortage, SUM(RESOLVED_AMOUNT) AS recovered FROM disputes GROUP BY 1 ORDER BY shortage DESC LIMIT 10
+  verified_at: 1792786522
+  verified_by: Berk
+  use_as_onboarding_question: false
+custom_instructions: Shortage recovery rate = total recovered (DISPUTES.RESOLVED_AMOUNT) divided by total shortage deducted (REMITTANCE_LINES where IS_SHORTAGE, as a positive amount). Never divide by disputed amount.

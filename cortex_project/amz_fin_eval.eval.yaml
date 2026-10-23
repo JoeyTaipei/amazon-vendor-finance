@@ -1,0 +1,9 @@
+evaluation:
+  agent: AMAZON_FINANCE_APP.APP.AMAZON_VENDOR_FINANCE_AGENT
+  agent_version: LIVE
+  dataset_fqn: AMAZON_FINANCE_APP.OPS.AMZ_FIN_EVAL_20261023_1340
+metrics:
+  - name: "answer_correctness"
+    version: "v2_0"
+  - name: "logical_consistency"
+    version: "v2_0"
